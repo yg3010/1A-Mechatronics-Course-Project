@@ -1,0 +1,489 @@
+//constants for erasing mechanism
+
+//eraser move is the motor encoder value for which the eraser is in the down
+//position
+
+//eraser power is the speed of raising and lowering the eraser
+
+//eraser rotate is the speed to set the eraser spin
+const int eraserMove=87;
+const int eraserPower=40;
+const int eraserRotate=80;
+
+//some distances had to be hardcoded as they were always constant, these were
+//found through testing
+
+//some motor powers were ideal for many different funtions, so they
+//were also made constants (to remove ambiguity/"magic numbers")
+
+const int accelDist = 300;
+const int decelDist = 100;
+const int turnRadius = -200;
+const int reverseAlign = -50;
+const int mediumMotorSpeed = 40;
+const int reverseSpeedSlow = -10;
+
+//prompts user to select colour option, waits for button press & release
+
+int optionSelect(){
+	displayString(6,"up-blue, down-red,right-black");
+	displayString(8,"Press center for shutdown");
+	while(!getButtonPress(ANY_BUTTON)){}
+
+	if(getButtonPress(UP_BUTTON)){
+		//blue
+		while(getButtonPress(UP_BUTTON)){}
+		return (int)colorBlue;
+	}
+	else if(getButtonPress(DOWN_BUTTON)){
+		//red
+		while(getButtonPress(DOWN_BUTTON)){}
+		return (int)colorRed;
+	}
+	else if(getButtonPress(RIGHT_BUTTON)){
+		//black
+		while(getButtonPress(RIGHT_BUTTON)){}
+		return (int)colorBlack;
+	}
+	else{
+		while(getButtonPress(ENTER_BUTTON)){}
+		return 0;
+	}
+
+}
+
+//takes in distance parameter, so that the robot does not pass the specified
+//distance in the caller function while the erase function is called
+
+//checks for specified colour option using colour sensors
+
+//if colour detected and the erasing mechanism is not already activated,
+//activate the erasing mechanism
+
+//if colour not detected and the erasing mechanism is not already //deactivated,
+//deactivate the erasing mechanism
+
+//takes in motorType boolean as conflict occurs when using the motor encoder
+//of motor A for everything, this boolean solves that conflict easily by
+//using the motor B motor encoder instead
+//code looks inefficient but the boolean only adds one more conditional
+//statement, as for example if boolean is false, that means that only the
+//code specified for motor B should run
+
+void erase(int distance, int colorSelect, bool motorTypeA)
+{
+	wait1Msec(50);
+	if(motorTypeA){
+		if((SensorValue[S1] == colorSelect || SensorValue[S2] == 
+colorSelect) && 
+			(nMotorEncoder[motorA] < distance))
+		{
+			if(nMotorEncoder[motorD] != -eraserMove)
+			{
+				motor[motorD] = -eraserPower;
+				while(nMotorEncoder[motorD] > -eraserMove)
+				{}
+				motor[motorD] = 0;
+				motor[motorC] = eraserRotate;
+			}
+		}
+
+		else
+		{
+			motor[motorC] = 0;
+			if(nMotorEncoder[motorD] != 0)
+			{
+				motor[motorD] = eraserPower;
+				while(nMotorEncoder[motorD] < 0)
+				{}
+				motor[motorD] = 0;
+			}
+		}
+	}
+	else{
+if((SensorValue[S1] == colorSelect || SensorValue[S2] == 
+colorSelect) && 
+			(nMotorEncoder[motorB] < distance))
+		{
+			if(nMotorEncoder[motorD] != -eraserMove)
+			{
+				motor[motorD] = -eraserPower;
+				while(nMotorEncoder[motorD] > -eraserMove)
+				{}
+				motor[motorD] = 0;
+				motor[motorC] = eraserRotate;
+			}
+		}
+
+		else
+		{
+			motor[motorC] = 0;
+			if(nMotorEncoder[motorD] != 0)
+			{
+				motor[motorD] = eraserPower;
+				while(nMotorEncoder[motorD] < 0)
+				{}
+				motor[motorD] = 0;
+			}
+		}
+	}
+}
+
+//designed to only take in negative speed value (as we only ever use it to
+//reverse), reverses without accelerating for set speed and set distance
+
+//this function is used to account for the extra distance the robot travels
+//after turning
+
+void resetDist(int speed, int dist)
+{
+	nMotorEncoder[motorB] = 0;
+	motor[motorA]=motor[motorB]= speed;
+	while(nMotorEncoder[motorB] > dist){}
+	motor[motorA]=motor[motorB]= 0;
+}
+
+//drives in set direction (based on speed parameter) until touch sensor //pressed
+
+void driveNoAccelerate(int speed)
+{
+	motor[motorA] = motor[motorB] = speed;
+	while(SensorValue[S3] == 0){}
+	motor[motorA] = motor[motorB] = 0;
+}
+
+//rotates robot clockwise for set angle, designed for angles that are a //multiple
+//of 90 degrees
+
+void turnCW(long turnAngle)
+{
+	if(turnAngle > 0)
+	{
+		long current = getGyroDegrees(S4);
+		long partway =  current + turnAngle/3;
+		
+		//accelerates while turning for first 30 degrees
+		
+		for(int i=1; i<=10; i++)
+		{
+			motor[motorA] += 1;
+			motor[motorB] += 5;
+			while(getGyroDegrees(S4)-current < i*3){}
+		}
+		
+		//turns at constant speed until 60 degrees are remaining to //complete
+		//the turn (ex. if input is 180, the robot turns at a
+		//constant speed from 30 degrees to 120 degrees
+		
+		while(getGyroDegrees(S4)-current < turnAngle-60){}
+		
+		//decelerates while turning for remeaining 60 degrees
+		
+		for(int i=1; i<=9; i++)
+		{
+			motor[motorA] -= 1;
+			motor[motorB] -= 3;
+			while(getGyroDegrees(S4)-partway<i*6){}
+		}
+		while(getGyroDegrees(S4)<current+turnAngle){}
+		motor[motorA]=motor[motorB]=0;
+	}
+}
+
+//if an obstacle is detected, wait in place and make beeping noise until any
+//button is pressed
+//information about playSoundFile() function found at [2]
+
+void obstacle()
+{
+	displayString(2,"please remove obstacle");
+	displayString(4,"reset robot and press a button");
+	setSoundVolume(75);
+	while(!getButtonPress(buttonAny))
+	{
+		playSoundFile("Boing");
+	}
+	setSoundVolume(0);
+	eraseDisplay();
+}
+
+//accelerates for set distance and accelerates until a set power is reached
+//after set power is reached the robot travels at constant speed
+
+//also erases while accelerating, using colour parameter and while loop
+
+void accelerate(int dist, int targetPower, int colour){
+	int incDist = dist/targetPower;
+	nMotorEncoder[motorB] = 0;
+	
+	for(int mpow = 1; mpow<targetPower; mpow++)
+	{
+		motor[motorA] = motor[motorB] = mpow;
+		while(nMotorEncoder[motorB] < mpow*incDist)
+		{
+			if(mpow>1)
+				erase(mpow*incDist, colour, true);
+		}
+	}
+
+}
+
+//decelerates from a set power to stop over a set distance
+
+void gradualStop(int motorPower, int stopDistance)
+{
+	int slowDist=(stopDistance/motorPower);
+
+	for(int i=motorPower; i>=3; i--)
+	{
+		int intitialMotor=nMotorEncoder[motorA];
+		motor[motorA] = motor[motorB] = i;
+		while((nMotorEncoder[motorA]-intitialMotor)<slowDist){}
+	}
+	motor[motorA] = motor[motorB] = 0;
+}
+
+//drives forward for a set distance while checking for colour
+//and unexpected events (checking if touch sensor pressed)
+
+//accelerates, drives for constants speed, then decelerates to stop
+
+bool driveFWD(int distance, int colour){
+	nMotorEncoder[motorA] = 0;
+	accelerate(accelDist,mediumMotorSpeed,colour);
+	while(nMotorEncoder[motorA] < distance-decelDist)
+	{
+		erase(distance-decelDist, colour, false);
+		if(SensorValue(S3) == 1)
+		{
+			gradualStop(mediumMotorSpeed,decelDist);
+			return false;
+		}
+	}
+
+	gradualStop(mediumMotorSpeed,decelDist);
+	return true;
+}
+
+//travels forwards until touch sensor pressed, returns the recorded distance
+
+//distance is kept in motor encoder counts to avoid decimals and floating
+//point comparison
+
+int returnDist()
+{
+	nMotorEncoder[motorA] = 0;
+
+	accelerate(accelDist,mediumMotorSpeed, 4);
+
+	while(SensorValue[S3] == 0){}
+	motor[motorA] = motor[motorB] = 0;
+	return nMotorEncoder[motorA];
+}
+
+//uses previous functions to calibrate across length and width
+//of the whiteboard twice
+
+//passes by reference the average length and width recorded
+
+void calibrate(int & lengthX, int & lengthY)
+{
+	int length1X=0;
+	int length1Y=0;
+	int length2X=0;
+	int length2Y=0;
+
+	length1X = returnDist();
+	resetDist(-15,turnRadius);
+	turnCW(90);
+	driveNoAccelerate(-5);
+
+
+	length1Y = returnDist();
+	resetDist(-15,turnRadius);
+	turnCW(90);
+	driveNoAccelerate(-5);
+
+	length2X = returnDist();
+	resetDist(-15,turnRadius);
+	turnCW(90);
+	driveNoAccelerate(-5);
+
+	length2Y = returnDist();
+	resetDist(-15,turnRadius);
+	turnCW(90);
+	driveNoAccelerate(-5);
+
+	lengthX = (length1X+length2X)/2;
+	lengthY = (length1Y+length2Y)/2;
+}
+
+//rounds the angle to the nearest multiple of 90 in case gyro is slightly off
+
+//checks whether the robot is facing 90/180/270/360 degrees from the original
+//position, as the gyro is never reset
+
+void origin(){
+	int angle = getGyroDegrees(S4);
+	for(int i = 0; angle != i-90; i += 90)
+	{
+		if (angle >= i-3 && angle <= i+3)
+		{
+			angle = i;
+		}
+	}
+	if(angle % 360 == 0 || angle == 0){
+	resetDist(reverseSpeedSlow,turnRadius);
+	turnCW(180);
+		driveNoAccelerate(20);
+		resetDist(reverseSpeedSlow,turnRadius);
+		turnCW(90);
+		driveNoAccelerate(20);
+		resetDist(reverseSpeedSlow,turnRadius);
+		turnCW(90);
+	}
+	else if(angle % 270 == 0){
+		turnCW(270);
+		driveNoAccelerate(20);
+		resetDist(reverseSpeedSlow,turnRadius);
+		turnCW(90);
+		driveNoAccelerate(20);
+		resetDist(reverseSpeedSlow,turnRadius);
+		turnCW(90);
+	}
+	else if(angle % 180 == 0){
+		driveNoAccelerate(20);
+		resetDist(reverseSpeedSlow,turnRadius);
+		turnCW(90);
+		driveNoAccelerate(20);
+		resetDist(reverseSpeedSlow,turnRadius);
+		turnCW(90);
+	}
+	else if(angle % 90 == 0){
+		turnCW(90);
+		driveNoAccelerate(20);
+		resetDist(reverseSpeedSlow,turnRadius);
+		turnCW(90);
+		driveNoAccelerate(20);
+		resetDist(reverseSpeedSlow,turnRadius);
+		turnCW(90);
+	}
+}
+
+//uses previous functions to make robot follow path stated in report
+
+//robot travels half the width when travelling towards the right wall of the
+//whiteboard, and slightly less than half the width when travelling left
+
+//this offset allows the robot to travel across the entire whiteboard and go
+//over the same spot multiple times
+
+bool zamboniLoop(int length,int width, int color)
+{
+	int i = 0;
+	int halfw = width/2;
+	int lessw = halfwreverseAlign;
+	bool drive = true;
+	while(i<=halfw)
+	{
+		drive = driveFWD(length,color);
+		if(!drive){
+			return drive;
+		}
+		else
+		{
+			resetDist(reverseSpeedSlow,turnRadius);
+			turnCW(90);
+			resetDist(reverseSpeedSlow,reverseAlign);
+		}
+		drive = driveFWD(halfw,color);
+		if(!drive)
+		{
+			return drive;
+		}
+		else
+		{
+			turnCW(90);
+			driveNoAccelerate(reverseSpeedSlow);
+		}
+		drive = driveFWD(length,color);
+		if(!drive){
+			return drive;
+		}
+		else
+		{
+			resetDist(reverseSpeedSlow,turnRadius);
+			turnCW(90);
+			resetDist(reverseSpeedSlow,reverseAlign);
+		}
+		drive = driveFWD(lessw,color);
+		if(!drive)
+		{
+			return drive;
+		}
+		else{
+			resetDist(reverseSpeedSlow,turnRadius);
+			turnCW(90);
+			driveNoAccelerate(reverseSpeedSlow);
+			i+=50;
+		}
+	}
+
+	return true;
+}
+task main()
+{
+	SensorType[S1] = sensorEV3_Color;
+	SensorType[S2] = sensorEV3_Color;
+	SensorType[S4] = sensorEV3_Gyro;
+	SensorType[S3] = sensorEV3_Touch;
+	wait1Msec(50);
+	SensorMode[S1] = modeEV3Color_Color;
+	SensorMode[S2] = modeEV3Color_Color;
+	SensorMode[S4] = modeEV3Gyro_RateAndAngle;
+	wait1Msec(50);
+	resetGyro(S4);
+	nMotorEncoder[motorA]=0;
+	nMotorEncoder[motorD]=0;
+	int lengthX = 0;
+	int lengthY = 0;
+	bool Path = false;
+
+
+	displayString(3,"press any button to start");
+	while(!getButtonPress(buttonAny)){}
+	while(getButtonPress(buttonAny)){}
+	eraseDisplay();
+
+	calibrate(lengthX,lengthY);
+	int option = optionSelect();
+	eraseDisplay();
+	
+	//checks to see if shutdown button pressed
+	
+	while (option != 0)
+	{
+	
+//if path is not true, it means that the robot either went off-path
+	//or hit an obstacle in its path
+		
+		Path = zamboniLoop(lengthX,lengthY, option);
+
+		if(Path)
+		{
+			origin();
+			option = optionSelect();
+			eraseDisplay();
+		}
+		else
+		{
+			obstacle();
+			option = optionSelect();
+			eraseDisplay();
+		}
+	}
+	
+	displayString(3,"Robot shutting down");
+
+	wait1Msec(5000);
+} 
